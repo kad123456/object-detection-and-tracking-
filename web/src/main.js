@@ -156,19 +156,42 @@ function fitCanvas(width, height) {
   canvas.height = Math.max(1, height);
 }
 
+function drawCameraPreview() {
+  if (sourceKind !== "camera" || running) return;
+  if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth && video.videoHeight) {
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  }
+  requestAnimationFrame(drawCameraPreview);
+}
+
 async function startCamera() {
   try {
     clearSource();
     cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+    const metadataReady = video.readyState >= HTMLMediaElement.HAVE_METADATA
+      ? Promise.resolve()
+      : new Promise((resolve, reject) => {
+          video.addEventListener("loadedmetadata", resolve, { once: true });
+          video.addEventListener("error", () => reject(new Error("The camera stream could not be opened.")), { once: true });
+        });
     video.srcObject = cameraStream;
     sourceKind = "camera";
-    await new Promise((resolve) => { video.onloadedmetadata = resolve; });
+    await metadataReady;
     await video.play();
+    if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      await new Promise((resolve, reject) => {
+        video.addEventListener("loadeddata", resolve, { once: true });
+        video.addEventListener("error", () => reject(new Error("The camera did not provide a video frame.")), { once: true });
+      });
+    }
+    if (!video.videoWidth || !video.videoHeight) throw new Error("The camera did not provide a usable video frame.");
     fitCanvas(video.videoWidth, video.videoHeight);
     setSourceName(`Camera · ${video.videoWidth}×${video.videoHeight}`);
-    setStatus("Camera ready. Start tracking when you’re ready.");
+    drawCameraPreview();
+    setStatus("Live camera preview. Start tracking when you’re ready.");
   } catch (error) {
     stopCamera();
+    sourceKind = null;
     setStatus(error?.name === "NotAllowedError" ? "Allow camera access in your browser, then try again." : `Could not start camera: ${error.message}`, true);
   }
 }
