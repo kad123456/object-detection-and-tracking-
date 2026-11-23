@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101613" />
+    <meta name="description" content="Detect and track objects in your browser with YOLO and ByteTrack." />
+    <title>Object Tracking Studio</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Object Tracking Studio home">
+          <span class="brand-mark">OT</span>
+          <span>Object Tracking Studio</span>
+        </a>
+        <div class="privacy-pill"><span class="privacy-dot"></span>Runs in your browser</div>
+      </header>
+
+      <main>
+        <section class="intro">
+          <p class="eyebrow">YOLOv8 · MULTI OBJECT TRACKING</p>
+          <h1>See every object.<br /><span>Keep every ID.</span></h1>
+          <p class="intro-copy">Choose a video or camera. Detection, tracking, and exports stay on this device.</p>
+        </section>
+
+        <section class="workspace" aria-label="Video tracking workspace">
+          <aside class="controls-card">
+            <div class="card-heading">
+              <div>
+                <p class="eyebrow">INPUT</p>
+                <h2>Choose a source</h2>
+              </div>
+              <span class="step-number">01</span>
+            </div>
+
+            <label class="upload-drop" for="file-input" id="drop-zone">
+              <span class="upload-icon" aria-hidden="true">↥</span>
+              <span class="upload-title">Drop a video here</span>
+              <span class="upload-subtitle">or <span class="text-link">browse files</span></span>
+              <span class="file-types">MP4 · MOV · WEBM · AVI</span>
+            </label>
+            <input id="file-input" type="file" accept="video/*" hidden />
+
+            <button class="button button-secondary camera-button" id="camera-button" type="button">
+              <span aria-hidden="true">◉</span> Use webcam
+            </button>
+            <p class="source-name" id="source-name">No source selected</p>
+
+            <div class="divider"></div>
+            <div class="card-heading settings-heading">
+              <div>
+                <p class="eyebrow">SETTINGS</p>
+                <h2>Tracking options</h2>
+              </div>
+              <span class="step-number">02</span>
+            </div>
+
+            <label class="field-label" for="tracker-select">Tracker</label>
+            <select id="tracker-select" class="field-control">
+              <option value="bytetrack">ByteTrack</option>
+              <option value="botsort">BoT-SORT</option>
+            </select>
+
+            <div class="field-row">
+              <label class="field-label" for="confidence">Confidence <output id="confidence-value">0.40</output></label>
+            </div>
+            <input id="confidence" class="range-control" type="range" min="0.10" max="0.90" step="0.05" value="0.40" />
+
+            <label class="field-label" for="class-filter">Classes <span class="optional">optional</span></label>
+            <input id="class-filter" class="field-control" type="text" placeholder="person, car" autocomplete="off" />
+
+            <label class="field-label" for="frame-skip">Frame skip</label>
+            <select id="frame-skip" class="field-control">
+              <option value="1">Every frame</option>
+              <option value="2">Every 2 frames</option>
+              <option value="3">Every 3 frames</option>
+              <option value="5">Every 5 frames</option>
+            </select>
+
+            <details class="line-settings">
+              <summary>Line crossing counter <span class="optional">optional</span></summary>
+              <label class="field-label" for="crossing-line">Line in source pixels</label>
+              <input id="crossing-line" class="field-control" type="text" placeholder="x1,y1,x2,y2" />
+              <p class="field-help">Example: <code>320,0,320,720</code></p>
+            </details>
+
+            <button class="button button-primary run-button" id="run-button" type="button" disabled>
+              <span class="play-icon" aria-hidden="true">▶</span><span id="run-label">Start tracking</span>
+            </button>
+            <button class="button button-stop" id="stop-button" type="button" hidden>Stop and export</button>
+            <p class="status-message" id="status-message" role="status" aria-live="polite">Select a video or start your webcam.</p>
+          </aside>
+
+          <section class="preview-card" aria-label="Annotated video preview">
+            <div class="preview-toolbar">
+              <div class="preview-title" id="preview-title"><span class="live-dot" id="live-dot"></span><span id="preview-label">PREVIEW</span></div>
+              <div class="device-badge" id="device-badge">MODEL NOT LOADED</div>
+            </div>
+            <div class="preview-stage" id="preview-stage">
+              <div class="empty-state" id="empty-state">
+                <div class="empty-graphic" aria-hidden="true"><span></span><span></span><span></span></div>
+                <h3>Your video appears here</h3>
+                <p>Pick a source, then start tracking.</p>
+              </div>
+              <video id="source-video" playsinline muted></video>
+              <canvas id="tracking-canvas" aria-label="Video with object detections"></canvas>
+            </div>
+            <div class="metrics-row">
+              <div class="metric"><span class="metric-label">FPS</span><strong id="fps-value">—</strong></div>
+              <div class="metric"><span class="metric-label">TRACKS</span><strong id="track-count">0</strong></div>
+              <div class="metric"><span class="metric-label">CROSSINGS</span><strong id="crossing-count">0</strong></div>
+              <div class="metric metric-wide"><span class="metric-label">INFERENCE</span><strong id="inference-time">—</strong></div>
+            </div>
+            <div class="export-row" id="export-row" hidden>
+              <span class="export-label">Your exports are ready</span>
+              <a class="download-link" id="video-download" href="#" download="tracked-video.webm">Download video <span>↓</span></a>
+              <a class="download-link" id="csv-download" href="#" download="tracking-results.csv">Download CSV <span>↓</span></a>
+            </div>
+          </section>
+        </section>
+
+        <section class="how-it-works">
+          <div><span class="how-index">01</span><h3>Load your source</h3><p>Use a local video or camera feed.</p></div>
+          <div><span class="how-index">02</span><h3>Track in real time</h3><p>YOLO detects; ByteTrack keeps IDs consistent.</p></div>
+          <div><span class="how-index">03</span><h3>Export your run</h3><p>Save an annotated video and frame-by-frame CSV.</p></div>
+        </section>
+      </main>
+
+      <footer><span>Private by design · video stays on your device</span><a href="https://github.com/kad123456/object-detection-and-tracking-" target="_blank" rel="noreferrer">Source code ↗</a></footer>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,12 @@
+.venv/
+node_modules/
+dist/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.pt
+*.engine
+*.onnx
+!web/public/models/yolov8n.onnx
+
+.vercel

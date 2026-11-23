@@ -1,0 +1,11 @@
+model: yolov8n.pt
+tracker: bytetrack
+conf: 0.4
+imgsz: 640
+classes: []
+frame_skip: 1
+save: true
+show: false
+output_dir: outputs
+trail_length: 24
+line_crossing: null
