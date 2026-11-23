@@ -283,6 +283,30 @@ function drawFrame(image, boxes, fps, inferenceMs) {
   $("inference-time").textContent = inferenceMs > 0 ? `${inferenceMs.toFixed(0)} ms` : "—";
 }
 
+async function advanceFileFrame() {
+  if (sourceKind !== "file" || !running || video.ended) return;
+  await video.play();
+  if (!running || video.ended) return;
+
+  await new Promise((resolve) => {
+    let callbackId;
+    let timerId;
+    const finish = () => {
+      video.pause();
+      video.removeEventListener("ended", finish);
+      if (callbackId !== undefined) video.cancelVideoFrameCallback?.(callbackId);
+      if (timerId !== undefined) clearTimeout(timerId);
+      resolve();
+    };
+    video.addEventListener("ended", finish, { once: true });
+    if (video.requestVideoFrameCallback) {
+      callbackId = video.requestVideoFrameCallback(finish);
+    } else {
+      timerId = setTimeout(finish, 1000 / 30);
+    }
+  });
+}
+
 function csvEscape(value) {
   const string = String(value ?? "");
   return /[",\r\n]/.test(string) ? `"${string.replaceAll('"', '""')}"` : string;
@@ -355,6 +379,7 @@ async function stopTracking({ ended = false } = {}) {
 
 async function processFrame() {
   if (!running) return;
+  if (sourceKind === "file") video.pause();
   const frame = await createImageBitmap(video);
   const frameStarted = performance.now();
   let inferenceMs = 0;
@@ -404,6 +429,16 @@ async function processFrame() {
   if (sourceKind === "file" && video.ended) {
     await stopTracking({ ended: true });
     return;
+  }
+  if (sourceKind === "file") {
+    try {
+      await advanceFileFrame();
+    } catch (error) {
+      await stopTracking();
+      setStatus(`Video playback stopped: ${error.message}`, true);
+      return;
+    }
+    if (!running) return;
   }
   requestAnimationFrame(processFrame);
 }
