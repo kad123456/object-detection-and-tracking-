@@ -3,131 +3,216 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#101613" />
-    <meta name="description" content="Detect and track objects in your browser with YOLO and ByteTrack." />
-    <title>Object Tracking Studio</title>
+    <meta name="theme-color" content="#0c1110" />
+    <meta name="description" content="Run YOLO object detection and multi-object tracking on video, webcam, and a built-in sample." />
+    <title>Object Tracking Studio — YOLOv8</title>
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
         <a class="brand" href="/" aria-label="Object Tracking Studio home">
           <span class="brand-mark">OT</span>
-          <span>Object Tracking Studio</span>
+          <span class="brand-name">Object Tracking <span>Studio</span></span>
         </a>
-        <div class="privacy-pill"><span class="privacy-dot"></span>Runs in your browser</div>
+        <nav class="top-nav" aria-label="Page navigation">
+          <a href="#demo">Demo clip</a>
+          <a href="#workspace">Workspace</a>
+          <a href="#pipeline">Pipeline</a>
+        </nav>
+        <div class="privacy-pill"><span class="privacy-dot"></span><span>On-device processing</span></div>
       </header>
 
       <main>
         <section class="intro">
-          <p class="eyebrow">YOLOv8 · MULTI OBJECT TRACKING</p>
-          <h1>See every object.<br /><span>Keep every ID.</span></h1>
-          <p class="intro-copy">Choose a video or camera. Detection, tracking, and exports stay on this device.</p>
+          <div class="intro-copy-block">
+            <p class="eyebrow"><span class="eyebrow-line"></span> YOLOV8 · MULTI-OBJECT TRACKING</p>
+            <h1>See the frame.<br /><span>Follow every ID.</span></h1>
+            <p class="intro-copy">A complete detection workflow for your video, webcam, or the included sample. The model runs in your browser; your footage stays on this device.</p>
+          </div>
+          <div class="intro-aside">
+            <span class="intro-aside-label">DETECTION ENGINE</span>
+            <strong>YOLOv8n <span>+</span> ByteTrack</strong>
+            <span class="intro-aside-detail">WebGPU accelerated · CPU/WASM fallback</span>
+          </div>
         </section>
 
-        <section class="workspace" aria-label="Video tracking workspace">
-          <aside class="controls-card">
-            <div class="card-heading">
-              <div>
-                <p class="eyebrow">INPUT</p>
-                <h2>Choose a source</h2>
+        <section class="demo-section" id="demo" aria-labelledby="demo-heading">
+          <div class="demo-video-wrap">
+            <div class="media-label"><span class="media-label-dot"></span> ANNOTATED SAMPLE <span class="media-label-meta">REAL MODEL OUTPUT</span></div>
+            <video id="sample-result" src="/demo/solutions_ci_demo_tracked.mp4" poster="/demo/sample-poster.jpg" controls playsinline preload="metadata" aria-label="Pre-annotated object tracking sample"></video>
+          </div>
+          <div class="demo-copy">
+            <p class="eyebrow">START WITH A WORKING EXAMPLE</p>
+            <h2 id="demo-heading">Watch it track.<br /><span>Then run it yourself.</span></h2>
+            <p class="demo-description">This 62-frame sample shows people and a bird detected and assigned persistent IDs. Run the original clip through the live model to inspect detections, tracking, latency, and exports frame by frame.</p>
+            <div class="demo-specs">
+              <div><strong>62</strong><span>frames</span></div>
+              <div><strong>640 × 360</strong><span>source</span></div>
+              <div><strong>ByteTrack</strong><span>tracker</span></div>
+            </div>
+            <button class="button button-demo" id="demo-button" type="button"><span aria-hidden="true">▶</span> Run live sample</button>
+            <p class="demo-note">The live sample uses the same model and settings as uploaded footage.</p>
+          </div>
+        </section>
+
+        <section class="workspace-section" id="workspace" aria-labelledby="workspace-heading">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">LIVE WORKSPACE</p>
+              <h2 id="workspace-heading">Choose a source and configure a run</h2>
+            </div>
+            <span class="local-badge"><span class="privacy-dot"></span> Video stays local</span>
+          </div>
+
+          <section class="workspace" aria-label="Video tracking workspace">
+            <aside class="controls-card">
+              <div class="card-heading">
+                <div><p class="eyebrow">01 · INPUT</p><h3>Choose a source</h3></div>
+                <span class="step-number">SOURCE</span>
               </div>
-              <span class="step-number">01</span>
-            </div>
 
-            <label class="upload-drop" for="file-input" id="drop-zone">
-              <span class="upload-icon" aria-hidden="true">↥</span>
-              <span class="upload-title">Drop a video here</span>
-              <span class="upload-subtitle">or <span class="text-link">browse files</span></span>
-              <span class="file-types">MP4 · MOV · WEBM · AVI</span>
-            </label>
-            <input id="file-input" type="file" accept="video/*" hidden />
+              <label class="upload-drop" for="file-input" id="drop-zone">
+                <span class="upload-icon" aria-hidden="true">↥</span>
+                <span class="upload-title">Drop a video here</span>
+                <span class="upload-subtitle">or <span class="text-link">browse files</span></span>
+                <span class="file-types">MP4 · MOV · WEBM · AVI</span>
+              </label>
+              <input id="file-input" type="file" accept="video/*" hidden />
 
-            <button class="button button-secondary camera-button" id="camera-button" type="button">
-              <span aria-hidden="true">◉</span> Use webcam
-            </button>
-            <p class="source-name" id="source-name">No source selected</p>
+              <button class="button button-secondary camera-button" id="camera-button" type="button"><span aria-hidden="true">◉</span> Use webcam</button>
+              <p class="source-name" id="source-name">No source selected</p>
 
-            <div class="divider"></div>
-            <div class="card-heading settings-heading">
-              <div>
-                <p class="eyebrow">SETTINGS</p>
-                <h2>Tracking options</h2>
+              <div class="divider"></div>
+              <div class="card-heading settings-heading">
+                <div><p class="eyebrow">02 · CONFIGURATION</p><h3>Tracking options</h3></div>
+                <span class="step-number">SETTINGS</span>
               </div>
-              <span class="step-number">02</span>
-            </div>
 
-            <label class="field-label" for="tracker-select">Tracker</label>
-            <select id="tracker-select" class="field-control">
-              <option value="bytetrack">ByteTrack</option>
-              <option value="botsort">BoT-SORT</option>
-            </select>
+              <label class="field-label" for="tracker-select">Tracker</label>
+              <select id="tracker-select" class="field-control">
+                <option value="bytetrack">ByteTrack</option>
+                <option value="botsort">BoT-SORT</option>
+              </select>
 
-            <div class="field-row">
-              <label class="field-label" for="confidence">Confidence <output id="confidence-value">0.40</output></label>
-            </div>
-            <input id="confidence" class="range-control" type="range" min="0.10" max="0.90" step="0.05" value="0.40" />
+              <label class="field-label" for="confidence">Confidence threshold <output id="confidence-value">0.40</output></label>
+              <input id="confidence" class="range-control" type="range" min="0.10" max="0.90" step="0.05" value="0.40" />
 
-            <label class="field-label" for="class-filter">Classes <span class="optional">optional</span></label>
-            <input id="class-filter" class="field-control" type="text" placeholder="person, car" autocomplete="off" />
+              <label class="field-label" for="class-filter">Class filter <span class="optional">OPTIONAL</span></label>
+              <input id="class-filter" class="field-control" type="text" placeholder="person, car" autocomplete="off" />
 
-            <label class="field-label" for="frame-skip">Frame skip</label>
-            <select id="frame-skip" class="field-control">
-              <option value="1">Every frame</option>
-              <option value="2">Every 2 frames</option>
-              <option value="3">Every 3 frames</option>
-              <option value="5">Every 5 frames</option>
-            </select>
+              <label class="field-label" for="frame-skip">Inference cadence</label>
+              <select id="frame-skip" class="field-control">
+                <option value="1">Every frame</option>
+                <option value="2">Every 2 frames</option>
+                <option value="3">Every 3 frames</option>
+                <option value="5">Every 5 frames</option>
+              </select>
 
-            <details class="line-settings">
-              <summary>Line crossing counter <span class="optional">optional</span></summary>
-              <label class="field-label" for="crossing-line">Line in source pixels</label>
-              <input id="crossing-line" class="field-control" type="text" placeholder="x1,y1,x2,y2" />
-              <p class="field-help">Example: <code>320,0,320,720</code></p>
-            </details>
+              <details class="line-settings">
+                <summary>Line-crossing counter <span class="optional">OPTIONAL</span></summary>
+                <label class="field-label" for="crossing-line">Line endpoints in source pixels</label>
+                <input id="crossing-line" class="field-control" type="text" placeholder="x1,y1,x2,y2" />
+                <p class="field-help">Example: <code>320,0,320,720</code></p>
+              </details>
 
-            <button class="button button-primary run-button" id="run-button" type="button" disabled>
-              <span class="play-icon" aria-hidden="true">▶</span><span id="run-label">Start tracking</span>
-            </button>
-            <button class="button button-stop" id="stop-button" type="button" hidden>Stop and export</button>
-            <p class="status-message" id="status-message" role="status" aria-live="polite">Select a video or start your webcam.</p>
-          </aside>
+              <button class="button button-primary run-button" id="run-button" type="button" disabled><span class="play-icon" aria-hidden="true">▶</span><span id="run-label">Start tracking</span></button>
+              <button class="button button-stop" id="stop-button" type="button" hidden>Stop and export</button>
+              <p class="status-message" id="status-message" role="status" aria-live="polite">Select a source or run the sample.</p>
+            </aside>
 
-          <section class="preview-card" aria-label="Annotated video preview">
-            <div class="preview-toolbar">
-              <div class="preview-title" id="preview-title"><span class="live-dot" id="live-dot"></span><span id="preview-label">PREVIEW</span></div>
-              <div class="device-badge" id="device-badge">MODEL NOT LOADED</div>
-            </div>
-            <div class="preview-stage" id="preview-stage">
-              <div class="empty-state" id="empty-state">
-                <div class="empty-graphic" aria-hidden="true"><span></span><span></span><span></span></div>
-                <h3>Your video appears here</h3>
-                <p>Pick a source, then start tracking.</p>
+            <section class="preview-card" aria-label="Annotated video preview">
+              <div class="preview-toolbar">
+                <div class="preview-title" id="preview-title"><span class="live-dot" id="live-dot"></span><span id="preview-label">OUTPUT PREVIEW</span></div>
+                <div class="toolbar-right"><span class="resolution-label" id="resolution-label">AWAITING SOURCE</span><div class="device-badge" id="device-badge">MODEL NOT LOADED</div></div>
               </div>
-              <video id="source-video" playsinline muted></video>
-              <canvas id="tracking-canvas" aria-label="Video with object detections"></canvas>
-            </div>
-            <div class="metrics-row">
-              <div class="metric"><span class="metric-label">FPS</span><strong id="fps-value">—</strong></div>
-              <div class="metric"><span class="metric-label">TRACKS</span><strong id="track-count">0</strong></div>
-              <div class="metric"><span class="metric-label">CROSSINGS</span><strong id="crossing-count">0</strong></div>
-              <div class="metric metric-wide"><span class="metric-label">INFERENCE</span><strong id="inference-time">—</strong></div>
-            </div>
-            <div class="export-row" id="export-row" hidden>
-              <span class="export-label">Your exports are ready</span>
-              <a class="download-link" id="video-download" href="#" download="tracked-video.webm">Download video <span>↓</span></a>
-              <a class="download-link" id="csv-download" href="#" download="tracking-results.csv">Download CSV <span>↓</span></a>
-            </div>
+              <div class="preview-stage" id="preview-stage">
+                <div class="empty-state" id="empty-state">
+                  <div class="empty-graphic" aria-hidden="true"><span></span><span></span><span></span></div>
+                  <h3>Your annotated output appears here</h3>
+                  <p>Run the sample or add a video source to begin.</p>
+                </div>
+                <video id="source-video" playsinline muted></video>
+                <canvas id="tracking-canvas" aria-label="Video with object detections"></canvas>
+                <div class="frame-overlay" id="frame-overlay" hidden><span class="frame-record-dot"></span><span id="overlay-status">PROCESSING</span><span class="overlay-divider"></span><span id="overlay-frame">FRAME 0000</span></div>
+              </div>
+              <div class="metrics-row">
+                <div class="metric"><span class="metric-label">LIVE FPS</span><strong id="fps-value">—</strong></div>
+                <div class="metric"><span class="metric-label">OBJECTS</span><strong id="track-count">0</strong></div>
+                <div class="metric"><span class="metric-label">CROSSINGS</span><strong id="crossing-count">0</strong></div>
+                <div class="metric metric-wide"><span class="metric-label">MODEL + TRACKER</span><strong id="inference-time">—</strong></div>
+              </div>
+              <div class="export-row" id="export-row" hidden>
+                <span class="export-label"><span class="export-ready-dot"></span> Run complete · exports ready</span>
+                <a class="download-link" id="video-download" href="#" download="tracked-video.webm">Annotated video <span>↓</span></a>
+                <a class="download-link" id="csv-download" href="#" download="tracking-results.csv">Tracking CSV <span>↓</span></a>
+              </div>
+            </section>
           </section>
         </section>
 
-        <section class="how-it-works">
-          <div><span class="how-index">01</span><h3>Load your source</h3><p>Use a local video or camera feed.</p></div>
-          <div><span class="how-index">02</span><h3>Track in real time</h3><p>YOLO detects; ByteTrack keeps IDs consistent.</p></div>
-          <div><span class="how-index">03</span><h3>Export your run</h3><p>Save an annotated video and frame-by-frame CSV.</p></div>
+        <section class="inspector-section" id="pipeline" aria-labelledby="pipeline-heading">
+          <div class="section-heading inspector-heading">
+            <div><p class="eyebrow">03 · RUN INSPECTOR</p><h2 id="pipeline-heading">What the model is doing</h2></div>
+            <div class="pipeline-state" id="pipeline-state"><span class="pipeline-state-dot"></span><span id="pipeline-state-label">WAITING FOR SOURCE</span></div>
+          </div>
+
+          <div class="pipeline-grid" role="list" aria-label="Processing stages">
+            <article class="pipeline-step" id="stage-source" data-state="idle" role="listitem">
+              <span class="pipeline-index">01</span><span class="pipeline-icon">▣</span>
+              <div><h3>Decode frame</h3><p id="stage-source-detail">Waiting for a video or camera frame.</p></div>
+              <span class="stage-state" id="stage-source-state">WAITING</span>
+            </article>
+            <article class="pipeline-step" id="stage-model" data-state="idle" role="listitem">
+              <span class="pipeline-index">02</span><span class="pipeline-icon">◎</span>
+              <div><h3>YOLO inference</h3><p id="stage-model-detail">Load the local YOLOv8n ONNX model.</p></div>
+              <span class="stage-state" id="stage-model-state">WAITING</span>
+            </article>
+            <article class="pipeline-step" id="stage-track" data-state="idle" role="listitem">
+              <span class="pipeline-index">03</span><span class="pipeline-icon">⌖</span>
+              <div><h3>Associate track IDs</h3><p id="stage-track-detail">ByteTrack links detections across frames.</p></div>
+              <span class="stage-state" id="stage-track-state">WAITING</span>
+            </article>
+            <article class="pipeline-step" id="stage-render" data-state="idle" role="listitem">
+              <span class="pipeline-index">04</span><span class="pipeline-icon">▤</span>
+              <div><h3>Draw and export</h3><p id="stage-render-detail">Render labels, trails, and CSV observations.</p></div>
+              <span class="stage-state" id="stage-render-state">WAITING</span>
+            </article>
+          </div>
+
+          <div class="inspector-grid">
+            <section class="telemetry-card" aria-labelledby="telemetry-heading">
+              <div class="subsection-heading"><div><p class="eyebrow">FRAME TELEMETRY</p><h3 id="telemetry-heading">Measured per stage</h3></div><span class="telemetry-frame" id="inspector-frame">FRAME —</span></div>
+              <div class="telemetry-list">
+                <div class="telemetry-row"><span><i class="telemetry-mark capture-mark"></i>Frame capture</span><strong id="capture-latency">—</strong></div>
+                <div class="telemetry-row"><span><i class="telemetry-mark inference-mark"></i>YOLO + tracker</span><strong id="stage-inference-latency">—</strong></div>
+                <div class="telemetry-row"><span><i class="telemetry-mark render-mark"></i>Canvas rendering</span><strong id="render-latency">—</strong></div>
+                <div class="telemetry-row"><span><i class="telemetry-mark export-mark"></i>CSV observations</span><strong id="observation-count">0</strong></div>
+              </div>
+              <div class="progress-block"><div class="progress-copy"><span>VIDEO PROGRESS</span><strong id="video-progress-label">—</strong></div><div class="progress-track"><span id="video-progress-fill"></span></div></div>
+            </section>
+
+            <section class="detection-card" aria-labelledby="detections-heading">
+              <div class="subsection-heading detection-heading"><div><p class="eyebrow">LATEST INFERENCE</p><h3 id="detections-heading">Objects in this frame</h3></div><span class="object-count-badge" id="inspector-object-count">0 objects</span></div>
+              <div class="table-scroll">
+                <table class="detection-table">
+                  <thead><tr><th>CLASS</th><th>TRACK ID</th><th>CONFIDENCE</th><th>BOX · PX</th></tr></thead>
+                  <tbody id="detection-rows"><tr class="empty-row"><td colspan="4">Run inference to inspect boxes, scores, and persistent IDs.</td></tr></tbody>
+                </table>
+              </div>
+              <p class="table-footnote">Coordinates are in the source frame. The table shows up to 8 detections from the latest model pass.</p>
+            </section>
+          </div>
+        </section>
+
+        <section class="method-section" aria-label="How tracking works">
+          <div><span class="method-number">01</span><div><h3>Detect</h3><p>YOLOv8 scores objects against the confidence threshold.</p></div></div>
+          <div><span class="method-number">02</span><div><h3>Associate</h3><p>The selected tracker matches detections and carries IDs forward.</p></div></div>
+          <div><span class="method-number">03</span><div><h3>Inspect</h3><p>Boxes, latency, frame details, and observations update as the run proceeds.</p></div></div>
+          <div><span class="method-number">04</span><div><h3>Export</h3><p>Download an annotated WebM and the frame-by-frame CSV.</p></div></div>
         </section>
       </main>
 
-      <footer><span>Private by design · video stays on your device</span><a href="https://github.com/kad123456/object-detection-and-tracking-" target="_blank" rel="noreferrer">Source code ↗</a></footer>
+      <footer><span>Local video processing · Your footage is never uploaded</span><span class="footer-right">YOLOv8n · ONNX · <a href="https://github.com/kad123456/object-detection-and-tracking-" target="_blank" rel="noreferrer">Source code ↗</a></span></footer>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

@@ -2,7 +2,9 @@ import { YOLO } from "@ultralytics/yolo";
 import "./style.css";
 
 const MODEL_URL = "/models/yolov8n.onnx";
+const DEMO_VIDEO_URL = "/demo/solutions_ci_demo.mp4";
 const $ = (id) => document.getElementById(id);
+const PIPELINE_STAGES = ["source", "model", "track", "render"];
 
 const video = $("source-video");
 const canvas = $("tracking-canvas");
@@ -33,10 +35,91 @@ let lastCenters = new Map();
 let countedIds = new Set();
 let crossingLine = null;
 let crossings = 0;
+let demoLoading = false;
 
 function setStatus(message, error = false) {
   statusMessage.textContent = message;
   statusMessage.classList.toggle("error", error);
+}
+
+function setPipelineStage(name, state, detail) {
+  const step = $(`stage-${name}`);
+  if (!step) return;
+  step.dataset.state = state;
+  $(`stage-${name}-state`).textContent = state === "active" ? "IN PROGRESS" : state === "done" ? "COMPLETE" : state === "error" ? "ERROR" : "WAITING";
+  if (detail) $(`stage-${name}-detail`).textContent = detail;
+}
+
+function setPipelineState(label, state = "idle") {
+  $("pipeline-state-label").textContent = label;
+  $("pipeline-state").dataset.state = state;
+}
+
+function resetPipeline() {
+  for (const name of PIPELINE_STAGES) setPipelineStage(name, "idle");
+  setPipelineStage("source", "idle", "Waiting for a video or camera frame.");
+  setPipelineStage("model", "idle", "Load the local YOLOv8n ONNX model.");
+  setPipelineStage("track", "idle", `${$("tracker-select").selectedOptions[0].text} links detections across frames.`);
+  setPipelineStage("render", "idle", "Render labels, trails, and CSV observations.");
+  setPipelineState("WAITING FOR SOURCE");
+}
+
+function formatTime(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "—";
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.floor(seconds % 60);
+  return `${minutes}:${String(remainder).padStart(2, "0")}`;
+}
+
+function updateVideoProgress() {
+  const fill = $("video-progress-fill");
+  const track = fill.parentElement;
+  if (sourceKind === "camera") {
+    track.dataset.live = "true";
+    $("video-progress-label").textContent = "LIVE CAMERA";
+    return;
+  }
+  track.dataset.live = "false";
+  if (sourceKind === "file" && Number.isFinite(video.duration) && video.duration > 0) {
+    const percent = Math.min(100, (video.currentTime / video.duration) * 100);
+    fill.style.width = `${percent.toFixed(1)}%`;
+    $("video-progress-label").textContent = `${Math.round(percent)}% · ${formatTime(video.currentTime)} / ${formatTime(video.duration)}`;
+  } else {
+    fill.style.width = "0%";
+    $("video-progress-label").textContent = "—";
+  }
+}
+
+function updateDetectionTable(boxes) {
+  const threshold = Number($("confidence").value);
+  const visible = (boxes ?? []).filter((box) => Number(box.conf) >= threshold).slice(0, 8);
+  const rows = visible.map((box) => {
+    const row = document.createElement("tr");
+    const values = [
+      [box.name ?? `class ${box.cls}`, ""],
+      [box.id === undefined || box.id === null ? "—" : `#${box.id}`, "track-id"],
+      [`${(Number(box.conf) * 100).toFixed(1)}%`, "confidence-cell"],
+      [`${Math.round(box.x1)}, ${Math.round(box.y1)} → ${Math.round(box.x2)}, ${Math.round(box.y2)}`, "box-cell"],
+    ];
+    for (const [value, className] of values) {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      if (className) cell.className = className;
+      row.append(cell);
+    }
+    return row;
+  });
+  if (!rows.length) {
+    const row = document.createElement("tr");
+    row.className = "empty-row";
+    const cell = document.createElement("td");
+    cell.colSpan = 4;
+    cell.textContent = "No objects above the selected confidence threshold in this frame.";
+    row.append(cell);
+    rows.push(row);
+  }
+  $("detection-rows").replaceChildren(...rows);
+  $("inspector-object-count").textContent = `${visible.length} ${visible.length === 1 ? "object" : "objects"}`;
 }
 
 function classEntries() {
@@ -79,17 +162,30 @@ function readCrossingLine() {
 async function loadModel() {
   if (model) return model;
   setStatus("Loading YOLOv8n model… first load is about 13 MB.");
+  setPipelineStage("model", "active", "Opening the bundled ONNX model and selecting an available runtime.");
+  setPipelineState("LOADING YOLOV8N", "active");
   $("device-badge").textContent = "LOADING MODEL";
-  model = await YOLO.load(MODEL_URL, { device: "auto" });
-  $("device-badge").textContent = model.device === "webgpu" ? "WEBGPU" : "CPU / WASM";
-  return model;
+  try {
+    model = await YOLO.load(MODEL_URL, { device: "auto" });
+    const device = model.device === "webgpu" ? "WEBGPU" : "CPU / WASM";
+    $("device-badge").textContent = device;
+    setPipelineStage("model", "done", `YOLOv8n ready on ${device}. First load downloads about 13 MB.`);
+    return model;
+  } catch (error) {
+    setPipelineStage("model", "error", error.message || "The local model could not be loaded.");
+    setPipelineState("MODEL LOAD FAILED", "error");
+    throw error;
+  }
 }
 
 function setSourceName(name) {
   $("source-name").textContent = name;
   $("empty-state").hidden = true;
   $("preview-stage").classList.add("has-source");
+  $("resolution-label").textContent = `${canvas.width} × ${canvas.height}`;
   runButton.disabled = false;
+  setPipelineStage("source", "done", `${sourceKind === "camera" ? "Live camera" : "Video file"} ready · ${canvas.width} × ${canvas.height}.`);
+  setPipelineState("SOURCE READY", "done");
 }
 
 function setSourceControlsDisabled(disabled) {
@@ -125,6 +221,19 @@ function clearSource() {
   $("track-count").textContent = "0";
   $("fps-value").textContent = "—";
   $("inference-time").textContent = "—";
+  $("capture-latency").textContent = "—";
+  $("stage-inference-latency").textContent = "—";
+  $("render-latency").textContent = "—";
+  $("observation-count").textContent = "0";
+  $("inspector-frame").textContent = "FRAME —";
+  $("inspector-object-count").textContent = "0 objects";
+  $("resolution-label").textContent = "AWAITING SOURCE";
+  $("frame-overlay").hidden = true;
+  $("video-progress-fill").style.width = "0%";
+  $("video-progress-fill").parentElement.dataset.live = "false";
+  $("video-progress-label").textContent = "—";
+  updateDetectionTable([]);
+  resetPipeline();
   $("preview-stage").classList.remove("has-source");
   $("empty-state").hidden = false;
   runButton.disabled = true;
@@ -132,23 +241,34 @@ function clearSource() {
   setStatus("Select a video or start your webcam.");
 }
 
-function selectVideoFile(file) {
-  if (busy) return;
-  if (!file || !file.type.startsWith("video/")) {
+function selectVideoFile(file, { fromDemo = false } = {}) {
+  if (busy || (demoLoading && !fromDemo)) return Promise.resolve(false);
+  if (!file) return Promise.resolve(false);
+  const isVideo = file.type.startsWith("video/") || /\.(mp4|mov|webm|avi|mkv)$/i.test(file.name);
+  if (!isVideo) {
     setStatus("Choose a supported video file.", true);
-    return;
+    return Promise.resolve(false);
   }
   clearSource();
-  objectUrl = URL.createObjectURL(file);
-  video.src = objectUrl;
   sourceKind = "file";
-  video.onloadedmetadata = () => {
-    setSourceName(`${file.name} · ${video.videoWidth}×${video.videoHeight}`);
-    fitCanvas(video.videoWidth, video.videoHeight);
-    video.currentTime = 0;
-    setStatus("Ready. Start tracking to process this clip.");
-  };
-  video.onerror = () => setStatus("The selected video could not be opened by this browser.", true);
+  return new Promise((resolve) => {
+    video.onloadedmetadata = () => {
+      fitCanvas(video.videoWidth, video.videoHeight);
+      setSourceName(`${file.name} · ${video.videoWidth}×${video.videoHeight}`);
+      video.currentTime = 0;
+      updateVideoProgress();
+      setStatus("Video ready. Start tracking to run detection and ID association.");
+      resolve(true);
+    };
+    video.onerror = () => {
+      setStatus("The selected video could not be opened by this browser.", true);
+      setPipelineStage("source", "error", "Browser could not decode this video.");
+      setPipelineState("SOURCE DECODE FAILED", "error");
+      resolve(false);
+    };
+    objectUrl = URL.createObjectURL(file);
+    video.src = objectUrl;
+  });
 }
 
 function fitCanvas(width, height) {
@@ -165,8 +285,11 @@ function drawCameraPreview() {
 }
 
 async function startCamera() {
+  if (busy || demoLoading) return;
   try {
     clearSource();
+    setPipelineStage("source", "active", "Requesting webcam access and waiting for the first frame.");
+    setPipelineState("OPENING WEBCAM", "active");
     cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
     const metadataReady = video.readyState >= HTMLMediaElement.HAVE_METADATA
       ? Promise.resolve()
@@ -188,10 +311,13 @@ async function startCamera() {
     fitCanvas(video.videoWidth, video.videoHeight);
     setSourceName(`Camera · ${video.videoWidth}×${video.videoHeight}`);
     drawCameraPreview();
+    updateVideoProgress();
     setStatus("Live camera preview. Start tracking when you’re ready.");
   } catch (error) {
     stopCamera();
     sourceKind = null;
+    setPipelineStage("source", "error", error?.name === "NotAllowedError" ? "Camera permission was denied." : error.message || "No camera frame received.");
+    setPipelineState("WEBCAM UNAVAILABLE", "error");
     setStatus(error?.name === "NotAllowedError" ? "Allow camera access in your browser, then try again." : `Could not start camera: ${error.message}`, true);
   }
 }
@@ -330,6 +456,30 @@ async function advanceFileFrame() {
   });
 }
 
+function updateFrameInspector(captureMs, inferenceMs, renderMs) {
+  $("inspector-frame").textContent = `FRAME ${String(frameNumber).padStart(4, "0")}`;
+  $("capture-latency").textContent = `${captureMs.toFixed(1)} ms`;
+  const shownInference = inferenceMs || (sampledFrames ? inferenceTotal / sampledFrames : 0);
+  $("stage-inference-latency").textContent = shownInference ? `${shownInference.toFixed(0)} ms` : "—";
+  $("render-latency").textContent = `${renderMs.toFixed(1)} ms`;
+  $("observation-count").textContent = csvRows.length.toLocaleString();
+  $("resolution-label").textContent = `${canvas.width} × ${canvas.height}`;
+  $("frame-overlay").hidden = false;
+  $("overlay-status").textContent = sourceKind === "camera" ? "LIVE TRACKING" : "TRACKING";
+  $("overlay-frame").textContent = `FRAME ${String(frameNumber).padStart(4, "0")}`;
+  updateVideoProgress();
+}
+
+function markExportsReady() {
+  if ($("pipeline-state").dataset.state === "error") return;
+  setPipelineStage("source", "done", `${frameNumber.toLocaleString()} frames captured from this run.`);
+  setPipelineStage("model", "done", `${sampledFrames.toLocaleString()} frames passed through YOLOv8n.`);
+  setPipelineStage("track", "done", `${$("tracker-select").selectedOptions[0].text} returned persistent IDs.`);
+  setPipelineStage("render", "done", `${csvRows.length.toLocaleString()} CSV observations · annotated video finalized.`);
+  $("frame-overlay").hidden = true;
+  setPipelineState("EXPORTS READY", "done");
+}
+
 function csvEscape(value) {
   const string = String(value ?? "");
   return /[",\r\n]/.test(string) ? `"${string.replaceAll('"', '""')}"` : string;
@@ -346,9 +496,10 @@ function downloadCsv() {
 }
 
 function finalizeRecording() {
-  if (!recording || recording.state === "inactive") return;
+  if (!recording || recording.state === "inactive") return false;
   recording.stop();
   recording = null;
+  return true;
 }
 
 function beginRecording() {
@@ -372,6 +523,8 @@ function beginRecording() {
     $("export-row").hidden = false;
     for (const track of recordingStream?.getTracks() ?? []) track.stop();
     recordingStream = null;
+    markExportsReady();
+    setStatus("Run complete. Annotated video and tracking CSV are ready.");
   };
   activeRecorder.start(1000);
 }
@@ -387,11 +540,18 @@ async function stopTracking({ ended = false } = {}) {
   setSourceControlsDisabled(false);
   $("preview-title").classList.remove("is-live");
   $("preview-label").textContent = "PREVIEW";
-  finalizeRecording();
+  const finalizingVideo = finalizeRecording();
   downloadCsv();
   $("export-row").hidden = false;
   if (!recording) $("video-download").hidden = recordedChunks.length === 0;
-  setStatus(ended ? "Video complete. Downloads are ready." : "Tracking stopped. Downloads are ready.");
+  if (finalizingVideo) {
+    setPipelineStage("render", "active", "CSV is written; finalizing the annotated WebM recording.");
+    setPipelineState("FINALIZING VIDEO", "active");
+    setStatus("Finalizing the annotated video and tracking CSV…");
+  } else {
+    markExportsReady();
+    setStatus(ended ? "Video complete. Downloads are ready." : "Tracking stopped. Downloads are ready.");
+  }
   if (sourceKind === "camera") {
     stopCamera();
     sourceKind = null;
@@ -403,10 +563,14 @@ async function stopTracking({ ended = false } = {}) {
 async function processFrame() {
   if (!running) return;
   if (sourceKind === "file") video.pause();
-  const frame = await createImageBitmap(video);
-  const frameStarted = performance.now();
+  const captureStarted = performance.now();
+  let frame = null;
+  let captureMs = 0;
   let inferenceMs = 0;
+  let renderMs = 0;
   try {
+    frame = await createImageBitmap(video);
+    captureMs = performance.now() - captureStarted;
     if (frameNumber % Number($("frame-skip").value) === 0) {
       const options = {
         tracker: `${$("tracker-select").value}.yaml`,
@@ -414,6 +578,12 @@ async function processFrame() {
       };
       const classes = resolveClassFilter();
       if (classes) options.classes = classes;
+      const trackerName = $("tracker-select").selectedOptions[0].text;
+      setPipelineStage("source", "done", `Frame ${frameNumber} decoded · ${canvas.width} × ${canvas.height}.`);
+      setPipelineStage("model", "active", `YOLOv8n is scoring frame ${frameNumber} at ${Number($("confidence").value).toFixed(2)} confidence.`);
+      setPipelineStage("track", "active", `${trackerName} is matching detections with recent track history.`);
+      setPipelineStage("render", "idle", "Waiting for model results to draw this frame.");
+      setPipelineState(`INFERENCE · FRAME ${frameNumber}`, "active");
       const inferenceStarted = performance.now();
       lastResult = await model.track(frame, options);
       inferenceMs = performance.now() - inferenceStarted;
@@ -425,11 +595,26 @@ async function processFrame() {
       pushTrails(csvTracks);
       updateCrossings(csvTracks);
       recordRows(csvTracks);
+      updateDetectionTable(lastTracks);
+      setPipelineStage("model", "done", `${lastTracks.filter((box) => Number(box.conf) >= threshold).length} detections above threshold.`);
+      setPipelineStage("track", "done", `${trackerName} returned ${new Set(csvTracks.map((box) => box.id)).size} persistent IDs for this frame.`);
+      setPipelineStage("render", "active", "Drawing boxes, confidence labels, trails, and frame metrics.");
+    } else {
+      const cadence = Number($("frame-skip").value);
+      setPipelineStage("source", "done", `Frame ${frameNumber} decoded · ${canvas.width} × ${canvas.height}.`);
+      setPipelineStage("model", "done", `Inference skipped by cadence (${cadence}); latest detections are carried forward.`);
+      setPipelineStage("track", "done", "Existing track IDs remain visible until the next inference frame.");
+      setPipelineStage("render", "active", "Updating the current frame with the latest tracked objects.");
     }
     const elapsed = (performance.now() - startedAt) / 1000;
     const fps = elapsed > 0 ? (frameNumber + 1) / elapsed : 0;
+    const renderStarted = performance.now();
     drawFrame(frame, lastTracks, fps, inferenceMs || (sampledFrames ? inferenceTotal / sampledFrames : 0));
+    renderMs = performance.now() - renderStarted;
     frameNumber += 1;
+    updateFrameInspector(captureMs, inferenceMs, renderMs);
+    setPipelineStage("render", "done", `Frame ${frameNumber - 1} annotated · ${renderMs.toFixed(1)} ms render time.`);
+    setPipelineState(`RUNNING · FRAME ${frameNumber}`, "active");
   } catch (error) {
     running = false;
     busy = false;
@@ -443,9 +628,12 @@ async function processFrame() {
     setSourceControlsDisabled(false);
     $("preview-title").classList.remove("is-live");
     $("preview-label").textContent = "PREVIEW";
+    $("frame-overlay").hidden = true;
+    setPipelineStage("track", "error", error.message || "Inference stopped before this frame completed.");
+    setPipelineState("RUN FAILED", "error");
     setStatus(error.message || "Tracking failed.", true);
   } finally {
-    frame.close();
+    frame?.close();
   }
 
   if (!running) return;
@@ -489,6 +677,21 @@ async function startTracking() {
     crossings = 0;
     $("crossing-count").textContent = "0";
     $("export-row").hidden = true;
+    $("video-download").hidden = true;
+    $("capture-latency").textContent = "—";
+    $("stage-inference-latency").textContent = "—";
+    $("render-latency").textContent = "—";
+    $("observation-count").textContent = "0";
+    $("inspector-frame").textContent = "FRAME —";
+    $("inspector-object-count").textContent = "0 objects";
+    updateDetectionTable([]);
+    $("video-progress-fill").style.width = "0%";
+    $("video-progress-fill").parentElement.dataset.live = sourceKind === "camera" ? "true" : "false";
+    $("video-progress-label").textContent = sourceKind === "camera" ? "LIVE CAMERA" : "0% · 0:00";
+    setPipelineStage("source", "done", `${sourceKind === "camera" ? "Live camera" : "Video file"} · ${canvas.width} × ${canvas.height}.`);
+    setPipelineStage("model", "done", `YOLOv8n ready on ${model.device === "webgpu" ? "WebGPU" : "CPU / WASM"}.`);
+    setPipelineStage("track", "active", `${$("tracker-select").selectedOptions[0].text} is ready to associate IDs.`);
+    setPipelineStage("render", "idle", "Drawing output and writing frame-level observations.");
     if (sourceKind === "file") video.currentTime = 0;
     await video.play();
     fitCanvas(video.videoWidth, video.videoHeight);
@@ -496,25 +699,71 @@ async function startTracking() {
     startedAt = performance.now();
     $("preview-title").classList.add("is-live");
     $("preview-label").textContent = "TRACKING";
+    $("overlay-status").textContent = sourceKind === "camera" ? "LIVE TRACKING" : "TRACKING";
+    $("frame-overlay").hidden = false;
     runButton.hidden = true;
     stopButton.hidden = false;
     beginRecording();
-    setStatus("Tracking is running. Stop to finalize your video and CSV.");
+    setPipelineState("RUNNING INFERENCE", "active");
+    setStatus("Running YOLO detections and persistent ID tracking on this device.");
     requestAnimationFrame(processFrame);
   } catch (error) {
     busy = false;
     setSourceControlsDisabled(false);
+    $("frame-overlay").hidden = true;
+    if ($("stage-model").dataset.state !== "error") {
+      setPipelineStage("track", "error", error.message || "The tracking run could not start.");
+      setPipelineState("RUN FAILED", "error");
+    }
     setStatus(error.message || "Could not start tracking.", true);
     runButton.disabled = false;
   }
 }
 
+async function runBundledDemo() {
+  if (busy || running || demoLoading) return;
+  demoLoading = true;
+  $("demo-button").disabled = true;
+  $("demo-button").innerHTML = '<span aria-hidden="true">◌</span> Loading sample…';
+  setSourceControlsDisabled(true);
+  runButton.disabled = true;
+  setPipelineStage("source", "active", "Fetching the bundled 62-frame sample clip.");
+  setPipelineState("LOADING BUILT-IN SAMPLE", "active");
+  setStatus("Loading the bundled sample clip…");
+  try {
+    const response = await fetch(DEMO_VIDEO_URL);
+    if (!response.ok) throw new Error(`Bundled demo could not be loaded (HTTP ${response.status}).`);
+    const blob = await response.blob();
+    const sampleFile = new File([blob], "solutions_ci_demo.mp4", { type: blob.type || "video/mp4" });
+    const selected = await selectVideoFile(sampleFile, { fromDemo: true });
+    if (!selected) throw new Error("The bundled demo video could not be decoded by this browser.");
+    $("workspace").scrollIntoView({ behavior: "smooth", block: "start" });
+    await startTracking();
+  } catch (error) {
+    setPipelineStage("source", "error", error.message || "The bundled sample could not be opened.");
+    setPipelineState("DEMO COULD NOT START", "error");
+    setStatus(error.message || "The bundled demo could not be opened.", true);
+  } finally {
+    demoLoading = false;
+    $("demo-button").disabled = false;
+    $("demo-button").innerHTML = '<span aria-hidden="true">▶</span> Run live sample';
+    setSourceControlsDisabled(busy || running);
+    if (!running && !busy && sourceKind) runButton.disabled = false;
+  }
+}
+
 $("confidence").addEventListener("input", () => { $("confidence-value").value = Number($("confidence").value).toFixed(2); });
-fileInput.addEventListener("change", (event) => selectVideoFile(event.target.files?.[0]));
+$("confidence").addEventListener("change", () => updateDetectionTable(lastTracks));
+fileInput.addEventListener("change", (event) => { void selectVideoFile(event.target.files?.[0]); });
 $("camera-button").addEventListener("click", startCamera);
+$("demo-button").addEventListener("click", runBundledDemo);
 runButton.addEventListener("click", startTracking);
 stopButton.addEventListener("click", () => stopTracking());
 video.addEventListener("ended", () => { if (running) stopTracking({ ended: true }); });
+video.addEventListener("timeupdate", updateVideoProgress);
+$("tracker-select").addEventListener("change", () => {
+  if (!running) setPipelineStage("track", "idle", `${$("tracker-select").selectedOptions[0].text} links detections across frames.`);
+});
 
 const dropZone = $("drop-zone");
 for (const name of ["dragenter", "dragover"]) {
@@ -524,3 +773,5 @@ for (const name of ["dragleave", "drop"]) {
   dropZone.addEventListener(name, (event) => { event.preventDefault(); dropZone.classList.remove("drag-active"); });
 }
 dropZone.addEventListener("drop", (event) => selectVideoFile(event.dataTransfer?.files?.[0]));
+resetPipeline();
+updateDetectionTable([]);

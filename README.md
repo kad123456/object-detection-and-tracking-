@@ -14,7 +14,7 @@ npm run dev
 
 For a production build, run `npm run build` from `web/`. Vercel uses `web/` as its project root and `web/vercel.json` to build the Vite app and serve `web/dist/` as a static deployment. The ONNX model is included at `web/public/models/yolov8n.onnx`. The browser package and model are subject to Ultralytics' [AGPL-3.0 license](https://github.com/ultralytics/inference/blob/main/web/LICENSE).
 
-The static app supports video files and webcam input. RTSP sources remain available through the Python CLI below, since browsers cannot read arbitrary RTSP streams directly.
+The static app supports video files and webcam input. The landing page includes a pre-annotated 62-frame clip and a **Run live sample** action that runs the original clip through YOLO and ByteTrack in the browser. During a run, the inspector reports frame capture, inference/tracking, render time, CSV observation count, and the latest detections with their coordinates and IDs. The browser exports an annotated WebM and tracking CSV. Video files and webcam frames stay on the device. RTSP sources remain available through the Python CLI below, since browsers cannot read arbitrary RTSP streams directly.
 
 ## Requirements and install
 
